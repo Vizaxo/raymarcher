@@ -41,7 +41,17 @@ let getLight p : f32 =
   let norm = getNorm p
   in vec3.dot norm lightDir
 
-type hit = #no_hit | #hit {hitPos: vec3}
+type material =
+  { colour: col3}
+
+type hit = #no_hit | #hit {hitPos: vec3, mat: material}
+
+let getColour (hit : hit) : col3 =
+  match hit
+  case #no_hit -> col(0, 0, 1)
+  case #hit {hitPos, mat} ->
+    let c = getLight hitPos
+    in col(c, c, c) vec3.* mat.colour
 
 let ray rd ro : hit =
   let steps = 0
@@ -55,7 +65,8 @@ let ray rd ro : hit =
          (steps+1, dist + d, d, ro vec3.+ (vec3.scale d rd))
        else
          (steps+1, dist, d, ro) --TODO: what to do if d is negative?
-  in if (d < epsilon) then #hit {hitPos=ro} else #no_hit
+  let mat = {colour=col(0.9, 0.3, 0.2)}
+  in if (d < epsilon) then #hit {hitPos=ro, mat} else #no_hit
 
 let shader (y: f32) (x: f32) : col3 =
   let camPos = vec(0, 3, -10)
@@ -65,9 +76,7 @@ let shader (y: f32) (x: f32) : col3 =
   let rd = vec3.normalise(filmPos vec3.- camPos)
   let ro = camPos
   let hit = ray rd ro
-  in match hit
-     case #no_hit -> col(0, 0, 1)
-     case #hit {hitPos} -> let c = getLight hitPos in col(c, c, c)
+  in getColour hit
 
 let bounds lower upper x : f32 = if x < lower then lower else (if x > upper then upper else x)
 
