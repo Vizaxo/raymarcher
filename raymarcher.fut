@@ -15,6 +15,7 @@ type material =
   { colour: col3}
 
 let black = {colour=col(0.0, 0.0, 0.0)}
+let white = {colour=col(1.0, 1.0, 1.0)}
 let blue = {colour=col(0.2, 0.4, 0.95)}
 let red = {colour=col(1.0, 0.1, 0.15)}
 
@@ -42,6 +43,7 @@ let fst (a, b) = a
 let snd (a, b) = b
 
 let maxSteps : i32 = 1000
+let maxBounces : i32 = 3
 let epsilon : f32 = 0.01
 
 let getNorm p : vec3 =
@@ -64,7 +66,7 @@ let getColour (hit : hit) : col3 =
     let c = getLight hitPos
     in col(c, c, c) vec3.* mat.colour
 
-let ray rd ro : hit =
+let march (rd : vec3) (ro : vec3) : hit =
   let steps = 0
   let dist : f32 = -1
   let d : f32 = 1
@@ -79,6 +81,20 @@ let ray rd ro : hit =
          (steps+1, dist, d, ro, mat) --TODO: what to do if d is negative?
   in if (d < epsilon) then #hit {hitPos=ro, mat} else #no_hit
 
+let ray (rd : vec3) (ro : vec3) : col3 =
+  let bounces = 0
+  let colour = col(1.0, 1.0, 1.0)
+  let (bounces, colour, _, _) =
+    loop (bounces, colour, rd, ro) while (bounces < maxBounces) do
+         match march rd ro
+         case #no_hit -> (bounces+1, col(0, 0, 0), rd, ro)
+         case #hit {hitPos, mat} ->
+      let hitNorm = getNorm(hitPos)
+      let reflected = hitNorm --TODO: reflect ray in normal
+      in (bounces+1, colour vec3.* mat.colour, reflected, hitPos vec3.+ (vec3.scale epsilon reflected))
+  let finalColour = if bounces != maxBounces then colour else col(0, 0, 0)
+  in finalColour
+
 let shader (y: f32) (x: f32) : col3 =
   let camPos = vec(0, 3, -10)
   let lookAt = vec(0, 0, 0)
@@ -87,7 +103,7 @@ let shader (y: f32) (x: f32) : col3 =
   let rd = vec3.normalise(filmPos vec3.- camPos)
   let ro = camPos
   let hit = ray rd ro
-  in getColour hit
+  in hit
 
 let bounds lower upper x : f32 = if x < lower then lower else (if x > upper then upper else x)
 
