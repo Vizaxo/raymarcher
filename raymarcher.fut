@@ -40,16 +40,21 @@ type hit = #no_hit | #hit {hitPos: vec3, mat: material}
 
 let lerp a b x = (vec3.scale (1 - x) a) vec3.+ (vec3.scale x b)
 
+let sphereDist (p : vec3) centre radius : f32 =
+  vec3.norm(centre vec3.- p) - radius
+
 let getDist (p : vec3) (obj : object, mat : material) : (f32, material) =
   (match obj
   case #sphere {centre, radius} ->
-    vec3.norm(centre vec3.- p) - radius
+    sphereDist p centre radius
   case #plane ->
     p.y, mat)
 
 let min (x : f32) (y : f32) : f32 = if x < y then x else y
 let minMat ((x, xmat) : (f32, material)) ((y, ymat) :  (f32, material)) : (f32, material)
   = if x < y then (x,xmat) else (y,ymat)
+let maxMat ((x, xmat) : (f32, material)) ((y, ymat) :  (f32, material)) : (f32, material)
+  = if x > y then (x,xmat) else (y,ymat)
 
 let minArr (os : [](f32, material)) : (f32, material) = reduce minMat (f32.highest, diffuse black) os
 
@@ -64,11 +69,13 @@ let sceneDist (p : vec3) : (f32, material) =
                      [leftWall, rightWall, back, front, ceiling, floor]
   let ceilLight = getDist p (#sphere {centre=vec(0, 605.997, 0), radius=600}, light (col(5.0, 5.0, 5.0)))
 
-  let mirrorBall =
-    getDist p (#sphere {centre=vec(-1.5, 1, 1.5), radius=1}, mirror white)
-  let redBall =
+  let mirrorSphere =
+    (f32.max
+     (sphereDist p (vec(-1.5, 1, 1.5)) 1)
+     (p.x + 1.3), mirror white)
+  let redSphere =
     getDist p (#sphere {centre=vec(1.5, 1, -1.5), radius=1}, diffuse red)
-  let spheres = minArr [mirrorBall, redBall]
+  let spheres = minArr [mirrorSphere, redSphere]
 
   let scene = minArr [spheres, walls, ceilLight]
   in scene
