@@ -16,6 +16,11 @@ let col (r, g, b) : col3 = {x=r, y=g, z=b}
 let height : i32 = 256
 let width : i32 = 512
 
+let maxSteps : i32 = 100
+let maxBounces : i32 = 3
+let maxRays : i32 = 1000
+let epsilon : f32 = 0.1
+
 type material =
   { colour: col3
   , reflectivity: f32
@@ -23,17 +28,22 @@ type material =
 
 let diffuse colour : material = {colour, light=false, reflectivity=0.2}
 let light colour : material = {colour, light=true, reflectivity=0.2}
-let mirror colour : material = {colour, light=false, reflectivity=0.8}
+let mirror colour : material = {colour, light=false, reflectivity=0.95}
 let black = col(0.0, 0.0, 0.0)
-let white = col(1.0, 1.0, 1.0)
-let blue = col(0.2, 0.4, 0.95)
-let red = col(1.0, 0.0, 0.0)
+let white = col(0.5, 0.5, 0.5)
+let blue = col(0.05, 0.05, 0.3)
+let red = col(20.0, 0.3, 1.3)
+let skyColour = col(0.1, 0.1, 0.5)
+let sunColour = col(5, 5, 4)
 
 type hit = #no_hit | #hit {hitPos: vec3, mat: material}
 
 let scene : [](object, material) =
-  [(#plane, diffuse blue),
-   (#sphere {centre=vec(0, 1, 0), radius=1}, light red)]
+  [(#plane, diffuse white),
+   (#sphere {centre=vec(0, 3, 0), radius=1}, mirror white),
+   (#sphere {centre=vec(1, 1.0, -1), radius=1}, diffuse blue),
+   (#sphere {centre=vec(0, 0.5, 1), radius=1}, mirror white)]
+   --(#sphere {centre=vec(-15, 0.5, 1), radius=10}, mirror white)]
 
 let lerp a b x = (vec3.scale (1 - x) a) vec3.+ (vec3.scale x b)
 
@@ -53,11 +63,6 @@ let sceneDist (p : vec3) : (f32, material) =
 
 let fst (a, _) = a
 let snd (_, b) = b
-
-let maxSteps : i32 = 1000
-let maxBounces : i32 = 3
-let maxRays : i32 = 100
-let epsilon : f32 = 0.001
 
 let getNorm p : vec3 =
   let d = fst (sceneDist p)
@@ -117,6 +122,13 @@ let sampleHemisphere n x y ray bounce : vec3 =
      then vec3.map (f32.negate) v
      else v
 
+let skyLighting rd colour =
+  let sunDir = vec3.normalise (vec(8,1,-5))
+  let skyDir = vec(0,1,0)
+  let sunLight = vec3.scale (f32.max 0 (vec3.dot rd sunDir)) sunColour
+  let skyLight = vec3.scale (f32.max 0 (vec3.dot rd skyDir)) skyColour
+  in colour vec3.* (sunLight vec3.+ skyLight)
+
 let ray ray x y (rd : vec3) (ro : vec3) : col3 =
   let bounces = 0
   let colour = col(1.0, 1.0, 1.0)
@@ -124,7 +136,7 @@ let ray ray x y (rd : vec3) (ro : vec3) : col3 =
   let (bounces, colour, _, _, _) =
     loop (bounces, colour, rd, ro, break) while (bounces < maxBounces && !break) do
          match march rd ro
-         case #no_hit -> (bounces+1, col(0, 0, 0), rd, ro, false)
+         case #no_hit -> (bounces, skyLighting rd colour, rd, ro, true)
          case #hit {hitPos, mat} ->
       if mat.light
       then (bounces, colour vec3.* mat.colour, vec(0,0,0), vec(0,0,0), true)
@@ -134,8 +146,7 @@ let ray ray x y (rd : vec3) (ro : vec3) : col3 =
         let scattered = sampleHemisphere hitNorm x y ray bounces
         let newRay = lerp scattered reflected (mat.reflectivity)
         in (bounces+1, colour vec3.* mat.colour, newRay, hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
-  let finalColour = if bounces != maxBounces then colour else col(0, 0, 0)
-  in finalColour
+  in if bounces != maxBounces then colour else black
 
 let jitterRay i x y rd ro =
   let u1 = rand x y i 0 2
