@@ -45,7 +45,7 @@ let red = col(1.0, 0.1, 0.1)
 let skyColour = col(0.1, 0.1, 0.5)
 let sunColour = col(5, 5, 4)
 
-type hit = #no_hit | #hit {hitPos: vec3, mat: material}
+type hit = #no_hit | #hit {hitPos: vec3, mat: material, insideObj: bool}
 
 let lerp a b x = (vec3.scale (1 - x) a) vec3.+ (vec3.scale x b)
 
@@ -108,18 +108,16 @@ let march (rd : vec3) (ro : vec3) : hit =
   let dist : f32 = -1
   let d : f32 = 1
   let mat = diffuse black
-  let (_, _, d, ro, mat) : (i32, f32, f32, vec3, material) =
-    loop (steps, dist, d, ro, mat) while (steps < maxSteps && (dist == -1 || d >= epsilon)) do
+  let insideObj = false
+  let (_, _, d, ro, mat, insideObj) : (i32, f32, f32, vec3, material, bool) =
+    loop (steps, dist, d, ro, mat, insideObj) while (steps < maxSteps && (dist == -1 || d >= epsilon)) do
     let (d, mat) = sceneDistSDF ro
+    let insideObj = if d < 0 then true else false
     -- use unsigned distance to allow marching through objects during
     -- refraction
     let d = f32.abs d
-    in if (d >= 0)
-       then
-         (steps+1, dist + d, d, ro vec3.+ (vec3.scale d rd), mat)
-       else
-         (steps+1, dist, d, ro, mat) --TODO: what to do if d is negative?
-  in if (d < epsilon) then #hit {hitPos=ro, mat} else #no_hit
+    in (steps+1, dist + d, d, ro vec3.+ (vec3.scale d rd), mat, insideObj)
+  in if (d < epsilon) then #hit {hitPos=ro, mat, insideObj} else #no_hit
 
 let reflect (d : vec3) (n : vec3) : vec3 =
   d vec3.- vec3.scale (2 * vec3.dot d n) n
@@ -127,6 +125,7 @@ let reflect (d : vec3) (n : vec3) : vec3 =
 let vinvert v : vec3 =
   vec3.map (* (-1)) v
 
+-- Snell's law for calculating the angle of refraction
 let snell rd surfaceNorm n1 n2 : vec3 =
   let normal = if vec3.dot rd surfaceNorm <= 0
                then surfaceNorm
@@ -135,6 +134,12 @@ let snell rd surfaceNorm n1 n2 : vec3 =
   let rootTerm = 1 - (r*r) * vec3.quadrance (vec3.cross normal rd)
   in (vec3.scale r (vec3.cross normal (vec3.cross (vinvert normal) rd)))
      vec3.- (vec3.scale (f32.sqrt rootTerm) normal)
+
+-- Schlick's approximation of the Fresnel factor for calulating the
+-- contribution ratio of reflected to refracted light
+let schlick n1 n2 costheta : f32 =
+  let r0 = ((n1 - n2) / (n1 + n2)) ** 2
+  in r0 + (1 - r0) * ((1 - costheta) ** 5)
 
 --from https://amindforeverprogramming.blogspot.com/2013/07/random-floats-in-glsl-330.html
 let hash (b : u32) : u32 =
@@ -163,11 +168,14 @@ let sampleSphere x y ray bounce : vec3 =
   let phi = tau * u2
   in vec3.normalise(vec(f32.cos phi * r, f32.sin phi * r, 2.0 * u1))
 
+let normalTowards n rd =
+  if vec3.dot n rd < 0.0
+  then vinvert rd
+  else rd
+
 let sampleHemisphere n x y ray bounce : vec3 =
   let v = sampleSphere x y ray bounce
-  in if vec3.dot n v < 0.0
-     then vec3.map (f32.negate) v
-     else v
+  in normalTowards n v
 
 let skyLighting rd colour =
   let sunDir = vec3.normalise (vec(8,1,-5))
@@ -184,20 +192,32 @@ let ray ray x y (rd : vec3) (ro : vec3) : col3 =
     loop (bounces, colour, rd, ro, break) while (bounces < maxBounces && !break) do
          match march rd ro
          case #no_hit -> (bounces, col(0,0,0), rd, ro, true)
-         case #hit {hitPos, mat} ->
+         case #hit {hitPos, mat, insideObj} ->
       if mat.light
       then (bounces, colour vec3.* mat.colour, vec(0,0,0), vec(0,0,0), true)
       else
-        let hitNorm = getNorm(hitPos)
-        let reflected = reflect rd hitNorm
+        let hitNorm = getNorm hitPos
+        let perfectReflect = reflect rd hitNorm
+        let scattered = sampleHemisphere hitNorm x y ray bounces
+        let reflected = lerp scattered perfectReflect (mat.reflectivity)
         let newRay =
           match mat.transparent
           case #nothing ->
-            let scattered = sampleHemisphere hitNorm x y ray bounces
-            in lerp scattered reflected (mat.reflectivity)
-          case #just ri -> snell rd hitNorm 1 ri
-        in (bounces+1, colour vec3.* mat.colour, newRay, hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
-  in if bounces != maxBounces then colour else black
+            reflected
+          case #just ri ->
+            let costheta = vec3.dot (normalTowards hitNorm rd) rd
+            let costheta = if insideObj then costheta else -costheta
+            let n1 = if insideObj then ri else 1
+            let n2 = if insideObj then 1 else ri
+            let pReflection = schlick n1 n2 costheta
+            let u1 = rand x y ray bounces 5
+            in if pReflection > u1
+               then perfectReflect
+               else trace (snell rd hitNorm n1 n2)
+        let newRay = vec3.normalise newRay
+        in (bounces+1, colour vec3.* mat.colour, newRay,
+            hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
+  in if bounces != maxBounces then colour else col(0,0,0)
 
 let jitterRay i x y rd ro =
   let u1 = rand x y i 0 2
