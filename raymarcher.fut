@@ -16,23 +16,32 @@ let col (r, g, b) : col3 = {x=r, y=g, z=b}
 let height : i32 = 300
 let width : i32 = 600
 
-let maxSteps : i32 = 50
-let maxBounces : i32 = 4
-let maxRays : i32 = 4000
-let epsilon : f32 = 0.01
+let maxSteps : i32 = 100
+let maxBounces : i32 = 5
+let maxRays : i32 = 1000
+let epsilon : f32 = 0.001
+
+type maybe 't = #nothing | #just t
 
 type material =
   { colour: col3
   , reflectivity: f32
-  , light: bool}
+  , light: bool
+  , transparent: maybe f32}
 
-let diffuse colour : material = {colour, light=false, reflectivity=0.2}
-let light colour : material = {colour, light=true, reflectivity=0.2}
-let mirror colour : material = {colour, light=false, reflectivity=0.95}
+let diffuse colour : material
+  = {colour, light=false, reflectivity=0.2, transparent=#nothing}
+let light colour : material
+  = {colour, light=true, reflectivity=0.2, transparent=#nothing}
+let mirror colour : material
+  = {colour, light=false, reflectivity=0.95, transparent=#nothing}
+let glass : material
+  = {colour=col(1.0, 1.0, 1.0), light=false, reflectivity=1.0
+     , transparent=#just 1.6}
 let black = col(0.0, 0.0, 0.0)
 let white = col(0.5, 0.5, 0.5)
 let blue = col(0.05, 0.05, 0.3)
-let red = col(10.0, 0.1, 0.1)
+let red = col(1.0, 0.1, 0.1)
 let skyColour = col(0.1, 0.1, 0.5)
 let sunColour = col(5, 5, 4)
 
@@ -50,7 +59,6 @@ let getDist (p : vec3) (obj : object, mat : material) : (f32, material) =
   case #plane ->
     p.y, mat)
 
-let min (x : f32) (y : f32) : f32 = if x < y then x else y
 let minMat ((x, xmat) : (f32, material)) ((y, ymat) :  (f32, material)) : (f32, material)
   = if x < y then (x,xmat) else (y,ymat)
 let maxMat ((x, xmat) : (f32, material)) ((y, ymat) :  (f32, material)) : (f32, material)
@@ -58,12 +66,12 @@ let maxMat ((x, xmat) : (f32, material)) ((y, ymat) :  (f32, material)) : (f32, 
 
 let minArr (os : [](f32, material)) : (f32, material) = reduce minMat (f32.highest, diffuse black) os
 
-let sceneDist (p : vec3) : (f32, material) =
+let sceneDistSDF (p : vec3) : (f32, material) =
   let leftWall = (p.x + 3.0, diffuse (col(0.2,0.8,0.2)))
   let rightWall = (-p.x + 3.0, diffuse (col(0.2,0.2,0.8)))
   let ceiling = (-p.y + 6.0, diffuse (col(0.8, 0.8, 0.8)))
   let floor = (p.y, diffuse (col(0.8,0.8,0.8)))
-  let back = (-p.z + 3.0, diffuse (col(0.8, 0.8, 0.8)))
+  let back = (-p.z + 3.0, diffuse (col(0.8, 0.8, 0.2)))
   let front = (p.z + 11.0, diffuse (col(0.2, 0.2, 0.2)))
   let walls = reduce minMat (f32.highest, diffuse black)
                      [leftWall, rightWall, back, front, ceiling, floor]
@@ -75,20 +83,24 @@ let sceneDist (p : vec3) : (f32, material) =
      (p.x + 1.3)
     , mirror white)
   let redSphere =
-    getDist p (#sphere {centre=vec(1.5, 1, 1.5), radius=1}, light red)
+    getDist p (#sphere {centre=vec(-0.5, 1, 1.5), radius=1}, diffuse red)
   let spheres = minArr [mirrorSphere, redSphere]
 
   let scene = minArr [spheres, walls, ceilLight]
-  in scene
+  let glassSphere =
+    sphereDist p (vec(1.5,1,-2)) 1
+  in minMat scene (glassSphere, glass)
 
 let fst (a, _) = a
 let snd (_, b) = b
 
 let getNorm p : vec3 =
-  let d = fst (sceneDist p)
-  let n = vec(d - fst(sceneDist(p vec3.- vec(epsilon, 0, 0)))
-             ,d - fst(sceneDist(p vec3.- vec(0, epsilon, 0)))
-             ,d - fst(sceneDist(p vec3.- vec(0, 0, epsilon))))
+  let d = vec(fst(sceneDistSDF(p vec3.+ vec(epsilon, 0, 0)))
+             ,fst(sceneDistSDF(p vec3.+ vec(0, epsilon, 0)))
+             ,fst(sceneDistSDF(p vec3.+ vec(0, 0, epsilon))))
+  let n = d vec3.- vec(fst(sceneDistSDF(p vec3.- vec(epsilon, 0, 0)))
+                      ,fst(sceneDistSDF(p vec3.- vec(0, epsilon, 0)))
+                      ,fst(sceneDistSDF(p vec3.- vec(0, 0, epsilon))))
   in vec3.normalise n
 
 let march (rd : vec3) (ro : vec3) : hit =
@@ -98,7 +110,10 @@ let march (rd : vec3) (ro : vec3) : hit =
   let mat = diffuse black
   let (_, _, d, ro, mat) : (i32, f32, f32, vec3, material) =
     loop (steps, dist, d, ro, mat) while (steps < maxSteps && (dist == -1 || d >= epsilon)) do
-    let (d, mat) = sceneDist ro
+    let (d, mat) = sceneDistSDF ro
+    -- use unsigned distance to allow marching through objects during
+    -- refraction
+    let d = f32.abs d
     in if (d >= 0)
        then
          (steps+1, dist + d, d, ro vec3.+ (vec3.scale d rd), mat)
@@ -108,6 +123,18 @@ let march (rd : vec3) (ro : vec3) : hit =
 
 let reflect (d : vec3) (n : vec3) : vec3 =
   d vec3.- vec3.scale (2 * vec3.dot d n) n
+
+let vinvert v : vec3 =
+  vec3.map (* (-1)) v
+
+let snell rd surfaceNorm n1 n2 : vec3 =
+  let normal = if vec3.dot rd surfaceNorm <= 0
+               then surfaceNorm
+               else vinvert surfaceNorm
+  let r = n1 / n2
+  let rootTerm = 1 - (r*r) * vec3.quadrance (vec3.cross normal rd)
+  in (vec3.scale r (vec3.cross normal (vec3.cross (vinvert normal) rd)))
+     vec3.- (vec3.scale (f32.sqrt rootTerm) normal)
 
 --from https://amindforeverprogramming.blogspot.com/2013/07/random-floats-in-glsl-330.html
 let hash (b : u32) : u32 =
@@ -163,8 +190,12 @@ let ray ray x y (rd : vec3) (ro : vec3) : col3 =
       else
         let hitNorm = getNorm(hitPos)
         let reflected = reflect rd hitNorm
-        let scattered = sampleHemisphere hitNorm x y ray bounces
-        let newRay = lerp scattered reflected (mat.reflectivity)
+        let newRay =
+          match mat.transparent
+          case #nothing ->
+            let scattered = sampleHemisphere hitNorm x y ray bounces
+            in lerp scattered reflected (mat.reflectivity)
+          case #just ri -> snell rd hitNorm 1 ri
         in (bounces+1, colour vec3.* mat.colour, newRay, hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
   in if bounces != maxBounces then colour else black
 
