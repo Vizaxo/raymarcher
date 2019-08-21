@@ -13,6 +13,9 @@ type object = #sphere sphere | #plane
 let vec (x, y, z) : vec3 = {x, y, z}
 let col (r, g, b) : col3 = {x=r, y=g, z=b}
 
+let height : i32 = 256
+let width : i32 = 512
+
 type material =
   { colour: col3
   , reflectivity: f32
@@ -48,8 +51,8 @@ let minMat ((x, xmat) : (f32, material)) ((y, ymat) :  (f32, material)) : (f32, 
 let sceneDist (p : vec3) : (f32, material) =
   reduce minMat (f32.highest, diffuse black) (map (getDist p) scene)
 
-let fst (a, b) = a
-let snd (a, b) = b
+let fst (a, _) = a
+let snd (_, b) = b
 
 let maxSteps : i32 = 1000
 let maxBounces : i32 = 3
@@ -134,9 +137,15 @@ let ray ray x y (rd : vec3) (ro : vec3) : col3 =
   let finalColour = if bounces != maxBounces then colour else col(0, 0, 0)
   in finalColour
 
+let jitterRay i x y rd ro =
+  let u1 = rand x y i 0 2
+  let u2 = rand x y i 0 3
+  let rd = vec3.normalise <| rd vec3.+ vec(u1 / f32.i32 width, u2 / f32.i32 height, 0)
+  in ray i x y rd ro
+
 let pixel x y rd ro : col3 =
   let mr = f32.i32 maxRays
-  in reduce (vec3.+) (col(0,0,0)) (map (\i -> ray i x y rd ro) (iota maxRays)) vec3./ col(mr,mr,mr)
+  in reduce (vec3.+) (col(0,0,0)) (map (\i -> jitterRay i x y rd ro) (iota maxRays)) vec3./ col(mr,mr,mr)
 
 let gammaCorrect c =
   vec3.map (f32.** 0.45) c
@@ -155,7 +164,7 @@ let bounds lower upper x : f32 = if x < lower then lower else (if x > upper then
 let packCol ({x=r, y=g, z=b} : col3) : [3]u8 = map (u8.f32 <-< bounds 0 255 <-< (* 255)) [r, g, b]
 
 let canvas (y: i32) (x: i32) : [3]u8 =
-  packCol <| (shader (-((f32.i32 y) / 256.0 - 0.5)) ((f32.i32 x) / 512.0 - 0.5))
+  packCol <| (shader (-((f32.i32 y) / (f32.i32 height) - 0.5)) ((f32.i32 x) / (f32.i32 width) - 0.5))
 
-entry main : [256][512][3]u8 =
-  map (\x -> (map (canvas x) (iota 512))) (iota 256)
+entry main : [height][width][3]u8 =
+  map (\x -> (map (canvas x) (iota width))) (iota height)
