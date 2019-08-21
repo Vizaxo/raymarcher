@@ -13,12 +13,13 @@ type object = #sphere sphere | #plane
 let vec (x, y, z) : vec3 = {x, y, z}
 let col (r, g, b) : col3 = {x=r, y=g, z=b}
 
-let height : i32 = 300
-let width : i32 = 600
+let slow : bool = true
+let height : i32 = if slow then 400 else 100
+let width : i32 = if slow then 600 else 100
 
-let maxSteps : i32 = 100
-let maxBounces : i32 = 5
-let maxRays : i32 = 1000
+let maxSteps : i32 = if slow then 100 else 50
+let maxBounces : i32 = if slow then 50 else 20
+let maxRays : i32 = if slow then 4000 else 500
 let epsilon : f32 = 0.001
 
 type maybe 't = #nothing | #just t
@@ -37,7 +38,7 @@ let mirror colour : material
   = {colour, light=false, reflectivity=0.95, transparent=#nothing}
 let glass : material
   = {colour=col(1.0, 1.0, 1.0), light=false, reflectivity=1.0
-     , transparent=#just 1.6}
+     , transparent=#just 2}
 let black = col(0.0, 0.0, 0.0)
 let white = col(0.5, 0.5, 0.5)
 let blue = col(0.05, 0.05, 0.3)
@@ -79,8 +80,9 @@ let sceneDistSDF (p : vec3) : (f32, material) =
 
   let mirrorSphere =
     (f32.max
-     (sphereDist p (vec(-1.5, 1, -1.5)) 1)
-     (p.x + 1.3)
+     (sphereDist p (vec(-2, 1, -1.5)) 1)
+     (-sphereDist p (vec(-1.5, 1, -1.7)) 1)
+     --(p.x + 1.8)
     , mirror white)
   let redSphere =
     getDist p (#sphere {centre=vec(-0.5, 1, 1.5), radius=1}, diffuse red)
@@ -88,7 +90,9 @@ let sceneDistSDF (p : vec3) : (f32, material) =
 
   let scene = minArr [spheres, walls, ceilLight]
   let glassSphere =
-    sphereDist p (vec(1.5,1,-2)) 1
+    (f32.max
+     (sphereDist p (vec(1.5,1,-2)) 1)
+     (p.y - 1.5))
   in minMat scene (glassSphere, glass)
 
 let fst (a, _) = a
@@ -233,7 +237,7 @@ let gammaCorrect c =
   vec3.map (f32.** 0.45) c
 
 let shader (y: f32) (x: f32) : col3 =
-  let camPos = vec(0, 2, -8)
+  let camPos = vec(0, 3, -8)
   let lookAt = vec(0, 2, 0)
   let filmCentre = camPos vec3.+ vec3.normalise(lookAt vec3.- camPos)
   let fov = 1
