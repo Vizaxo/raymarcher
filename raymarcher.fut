@@ -186,7 +186,8 @@ let shader (y: f32) (x: f32) : col3 =
   let lookAt = vec(0, 2, 0)
   let filmCentre = camPos vec3.+ vec3.normalise(lookAt vec3.- camPos)
   let fov = 1
-  let filmPos = filmCentre vec3.+ vec(x*fov, y*fov, 0)
+  let aspectRatio = f32.i32 width / f32.i32 height
+  let filmPos = filmCentre vec3.+ vec(x*fov*aspectRatio, y*fov, 0)
   let rd = vec3.normalise(filmPos vec3.- camPos)
   let ro = camPos
   in gammaCorrect <| pixel x y rd ro
