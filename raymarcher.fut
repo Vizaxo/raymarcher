@@ -24,7 +24,7 @@ let mirror colour : material = {colour, light=false, reflectivity=0.8}
 let black = col(0.0, 0.0, 0.0)
 let white = col(1.0, 1.0, 1.0)
 let blue = col(0.2, 0.4, 0.95)
-let red = col(1.0, 0.1, 0.15)
+let red = col(1.0, 0.0, 0.0)
 
 type hit = #no_hit | #hit {hitPos: vec3, mat: material}
 
@@ -53,7 +53,7 @@ let snd (a, b) = b
 
 let maxSteps : i32 = 1000
 let maxBounces : i32 = 3
-let maxRays : i32 = 1
+let maxRays : i32 = 100
 let epsilon : f32 = 0.001
 
 let getNorm p : vec3 =
@@ -114,7 +114,7 @@ let sampleHemisphere n x y ray bounce : vec3 =
      then vec3.map (f32.negate) v
      else v
 
-let ray x y (rd : vec3) (ro : vec3) : col3 =
+let ray ray x y (rd : vec3) (ro : vec3) : col3 =
   let bounces = 0
   let colour = col(1.0, 1.0, 1.0)
   let break = false
@@ -128,11 +128,18 @@ let ray x y (rd : vec3) (ro : vec3) : col3 =
       else
         let hitNorm = getNorm(hitPos)
         let reflected = reflect rd hitNorm
-        let scattered = sampleHemisphere hitNorm x y 1 bounces
+        let scattered = sampleHemisphere hitNorm x y ray bounces
         let newRay = lerp scattered reflected (mat.reflectivity)
         in (bounces+1, colour vec3.* mat.colour, newRay, hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
   let finalColour = if bounces != maxBounces then colour else col(0, 0, 0)
   in finalColour
+
+let pixel x y rd ro : col3 =
+  let mr = f32.i32 maxRays
+  in reduce (vec3.+) (col(0,0,0)) (map (\i -> ray i x y rd ro) (iota maxRays)) vec3./ col(mr,mr,mr)
+
+let gammaCorrect c =
+  vec3.map (f32.** 0.45) c
 
 let shader (y: f32) (x: f32) : col3 =
   let camPos = vec(0, 3, -10)
@@ -141,8 +148,7 @@ let shader (y: f32) (x: f32) : col3 =
   let filmPos = filmCentre vec3.+ vec(x*10, y*10, 0)
   let rd = vec3.normalise(filmPos vec3.- camPos)
   let ro = camPos
-  let hit = ray x y rd ro
-  in hit
+  in gammaCorrect <| pixel x y rd ro
 
 let bounds lower upper x : f32 = if x < lower then lower else (if x > upper then upper else x)
 
