@@ -32,18 +32,11 @@ let mirror colour : material = {colour, light=false, reflectivity=0.95}
 let black = col(0.0, 0.0, 0.0)
 let white = col(0.5, 0.5, 0.5)
 let blue = col(0.05, 0.05, 0.3)
-let red = col(20.0, 0.3, 1.3)
+let red = col(1.0, 0.3, 0.3)
 let skyColour = col(0.1, 0.1, 0.5)
 let sunColour = col(5, 5, 4)
 
 type hit = #no_hit | #hit {hitPos: vec3, mat: material}
-
-let scene : [](object, material) =
-  [(#plane, diffuse white),
-   (#sphere {centre=vec(0, 3, 0), radius=1}, mirror white),
-   (#sphere {centre=vec(1, 1.0, -1), radius=1}, diffuse blue),
-   (#sphere {centre=vec(0, 0.5, 1), radius=1}, mirror white)]
-   --(#sphere {centre=vec(-15, 0.5, 1), radius=10}, mirror white)]
 
 let lerp a b x = (vec3.scale (1 - x) a) vec3.+ (vec3.scale x b)
 
@@ -58,8 +51,27 @@ let min (x : f32) (y : f32) : f32 = if x < y then x else y
 let minMat ((x, xmat) : (f32, material)) ((y, ymat) :  (f32, material)) : (f32, material)
   = if x < y then (x,xmat) else (y,ymat)
 
+let minArr (os : [](f32, material)) : (f32, material) = reduce minMat (f32.highest, diffuse black) os
+
 let sceneDist (p : vec3) : (f32, material) =
-  reduce minMat (f32.highest, diffuse black) (map (getDist p) scene)
+  let leftWall = (p.x + 3.0, diffuse (col(0.2,0.8,0.2)))
+  let rightWall = (-p.x + 3.0, diffuse (col(0.2,0.2,0.8)))
+  let ceiling = (-p.y + 6.0, diffuse (col(0.8, 0.8, 0.8)))
+  let floor = (p.y, diffuse (col(0.8,0.8,0.8)))
+  let back = (-p.z + 3.0, diffuse (col(0.8, 0.8, 0.8)))
+  let front = (p.z + 11.0, diffuse (col(0.2, 0.2, 0.2)))
+  let walls = reduce minMat (f32.highest, diffuse black)
+                     [leftWall, rightWall, back, front, ceiling, floor]
+  let ceilLight = getDist p (#sphere {centre=vec(0, 605.997, 0), radius=600}, light (col(5.0, 5.0, 5.0)))
+
+  let mirrorBall =
+    getDist p (#sphere {centre=vec(-1.5, 1, 1.5), radius=1}, mirror white)
+  let redBall =
+    getDist p (#sphere {centre=vec(1.5, 1, -1.5), radius=1}, diffuse red)
+  let spheres = minArr [mirrorBall, redBall]
+
+  let scene = minArr [spheres, walls, ceilLight]
+  in scene
 
 let fst (a, _) = a
 let snd (_, b) = b
@@ -136,7 +148,7 @@ let ray ray x y (rd : vec3) (ro : vec3) : col3 =
   let (bounces, colour, _, _, _) =
     loop (bounces, colour, rd, ro, break) while (bounces < maxBounces && !break) do
          match march rd ro
-         case #no_hit -> (bounces, skyLighting rd colour, rd, ro, true)
+         case #no_hit -> (bounces, col(0,0,0), rd, ro, true)
          case #hit {hitPos, mat} ->
       if mat.light
       then (bounces, colour vec3.* mat.colour, vec(0,0,0), vec(0,0,0), true)
@@ -162,10 +174,11 @@ let gammaCorrect c =
   vec3.map (f32.** 0.45) c
 
 let shader (y: f32) (x: f32) : col3 =
-  let camPos = vec(0, 3, -10)
-  let lookAt = vec(0, 0, 0)
-  let filmCentre = vec3.normalise(lookAt vec3.- camPos)
-  let filmPos = filmCentre vec3.+ vec(x*10, y*10, 0)
+  let camPos = vec(0, 2, -8)
+  let lookAt = vec(0, 2, 0)
+  let filmCentre = camPos vec3.+ vec3.normalise(lookAt vec3.- camPos)
+  let fov = 1
+  let filmPos = filmCentre vec3.+ vec(x*fov, y*fov, 0)
   let rd = vec3.normalise(filmPos vec3.- camPos)
   let ro = camPos
   in gammaCorrect <| pixel x y rd ro
