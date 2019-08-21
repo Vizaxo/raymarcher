@@ -13,13 +13,13 @@ type object = #sphere sphere | #plane
 let vec (x, y, z) : vec3 = {x, y, z}
 let col (r, g, b) : col3 = {x=r, y=g, z=b}
 
-let height : i32 = 256
-let width : i32 = 512
+let height : i32 = 300
+let width : i32 = 600
 
-let maxSteps : i32 = 100
-let maxBounces : i32 = 3
-let maxRays : i32 = 1000
-let epsilon : f32 = 0.1
+let maxSteps : i32 = 50
+let maxBounces : i32 = 4
+let maxRays : i32 = 4000
+let epsilon : f32 = 0.01
 
 type material =
   { colour: col3
@@ -32,7 +32,7 @@ let mirror colour : material = {colour, light=false, reflectivity=0.95}
 let black = col(0.0, 0.0, 0.0)
 let white = col(0.5, 0.5, 0.5)
 let blue = col(0.05, 0.05, 0.3)
-let red = col(1.0, 0.3, 0.3)
+let red = col(10.0, 0.1, 0.1)
 let skyColour = col(0.1, 0.1, 0.5)
 let sunColour = col(5, 5, 4)
 
@@ -71,10 +71,11 @@ let sceneDist (p : vec3) : (f32, material) =
 
   let mirrorSphere =
     (f32.max
-     (sphereDist p (vec(-1.5, 1, 1.5)) 1)
-     (p.x + 1.3), mirror white)
+     (sphereDist p (vec(-1.5, 1, -1.5)) 1)
+     (p.x + 1.3)
+    , mirror white)
   let redSphere =
-    getDist p (#sphere {centre=vec(1.5, 1, -1.5), radius=1}, diffuse red)
+    getDist p (#sphere {centre=vec(1.5, 1, 1.5), radius=1}, light red)
   let spheres = minArr [mirrorSphere, redSphere]
 
   let scene = minArr [spheres, walls, ceilLight]
