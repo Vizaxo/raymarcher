@@ -71,6 +71,9 @@ let march (rd : vec3) (ro : vec3) : hit =
          (steps+1, dist, d, ro, mat) --TODO: what to do if d is negative?
   in if (d < epsilon) then #hit {hitPos=ro, mat} else #no_hit
 
+let reflect (d : vec3) (n : vec3) : vec3 =
+  d vec3.- vec3.scale (2 * vec3.dot d n) n
+
 let ray (rd : vec3) (ro : vec3) : col3 =
   let bounces = 0
   let colour = col(1.0, 1.0, 1.0)
@@ -84,8 +87,8 @@ let ray (rd : vec3) (ro : vec3) : col3 =
       then (bounces, colour vec3.* mat.colour, vec(0,0,0), vec(0,0,0), true)
       else
         let hitNorm = getNorm(hitPos)
-        let reflected = hitNorm --TODO: reflect ray in normal
-        in (bounces+1, colour vec3.* mat.colour, reflected, hitPos vec3.+ (vec3.scale epsilon reflected), false)
+        let reflected = reflect rd hitNorm
+        in (bounces+1, colour vec3.* mat.colour, reflected, hitPos vec3.+ (vec3.scale (2*epsilon) reflected), false)
   let finalColour = if bounces != maxBounces then colour else col(0, 0, 0)
   in finalColour
 
