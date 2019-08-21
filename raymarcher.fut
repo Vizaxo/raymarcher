@@ -1,5 +1,7 @@
 import "lib/github.com/athas/vector/vspace"
 
+let tau = 2 * f32.pi
+
 module vec3 = mk_vspace_3d f32
 type vec3 = vec3.vector
 type col3 = vec3.vector
@@ -13,10 +15,12 @@ let col (r, g, b) : col3 = {x=r, y=g, z=b}
 
 type material =
   { colour: col3
+  , reflectivity: f32
   , light: bool}
 
-let diffuse colour = {colour, light=false}
-let light colour = {colour, light=true}
+let diffuse colour : material = {colour, light=false, reflectivity=0.2}
+let light colour : material = {colour, light=true, reflectivity=0.2}
+let mirror colour : material = {colour, light=false, reflectivity=0.8}
 let black = col(0.0, 0.0, 0.0)
 let white = col(1.0, 1.0, 1.0)
 let blue = col(0.2, 0.4, 0.95)
@@ -27,6 +31,8 @@ type hit = #no_hit | #hit {hitPos: vec3, mat: material}
 let scene : [](object, material) =
   [(#plane, diffuse blue),
    (#sphere {centre=vec(0, 1, 0), radius=1}, light red)]
+
+let lerp a b x = (vec3.scale (1 - x) a) vec3.+ (vec3.scale x b)
 
 let getDist (p : vec3) (obj : object, mat : material) : (f32, material) =
   (match obj
@@ -47,7 +53,8 @@ let snd (a, b) = b
 
 let maxSteps : i32 = 1000
 let maxBounces : i32 = 3
-let epsilon : f32 = 0.01
+let maxRays : i32 = 1
+let epsilon : f32 = 0.001
 
 let getNorm p : vec3 =
   let d = fst (sceneDist p)
@@ -74,7 +81,40 @@ let march (rd : vec3) (ro : vec3) : hit =
 let reflect (d : vec3) (n : vec3) : vec3 =
   d vec3.- vec3.scale (2 * vec3.dot d n) n
 
-let ray (rd : vec3) (ro : vec3) : col3 =
+--from https://amindforeverprogramming.blogspot.com/2013/07/random-floats-in-glsl-330.html
+let hash (b : u32) : u32 =
+  let b = b + (b << 10)
+  let b = b ^ (b >> 6)
+  let b = b + (b << 3)
+  let b = b ^ (b >> 11)
+  let b = b + (b << 15)
+  in b
+let f32rand (f : f32) =
+  let mantissa = 0x007FFFFF
+  let one = 0x3F800000
+  let h = hash <| f32.to_bits f
+  let h = h & mantissa
+  let h = h | one
+  in f32.from_bits h - 1.0
+
+let rand x y ray bounce f : f32 =
+  let seed : f32 = f32rand((f32rand (x*5344 + y) * f32.i32 maxRays + f32.i32 ray) * f32.i32 maxBounces + f32.i32 bounce) + f32.i32 f
+  in f32rand seed
+
+let sampleSphere x y ray bounce : vec3 =
+  let u1 = rand x y ray bounce 0
+  let u2 = rand x y ray bounce 10
+  let r = f32.sqrt(1.0 - u1 * u1)
+  let phi = tau * u2
+  in vec3.normalise(vec(f32.cos phi * r, f32.sin phi * r, 2.0 * u1))
+
+let sampleHemisphere n x y ray bounce : vec3 =
+  let v = sampleSphere x y ray bounce
+  in if vec3.dot n v < 0.0
+     then vec3.map (f32.negate) v
+     else v
+
+let ray x y (rd : vec3) (ro : vec3) : col3 =
   let bounces = 0
   let colour = col(1.0, 1.0, 1.0)
   let break = false
@@ -88,7 +128,9 @@ let ray (rd : vec3) (ro : vec3) : col3 =
       else
         let hitNorm = getNorm(hitPos)
         let reflected = reflect rd hitNorm
-        in (bounces+1, colour vec3.* mat.colour, reflected, hitPos vec3.+ (vec3.scale (2*epsilon) reflected), false)
+        let scattered = sampleHemisphere hitNorm x y 1 bounces
+        let newRay = lerp scattered reflected (mat.reflectivity)
+        in (bounces+1, colour vec3.* mat.colour, newRay, hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
   let finalColour = if bounces != maxBounces then colour else col(0, 0, 0)
   in finalColour
 
@@ -99,7 +141,7 @@ let shader (y: f32) (x: f32) : col3 =
   let filmPos = filmCentre vec3.+ vec(x*10, y*10, 0)
   let rd = vec3.normalise(filmPos vec3.- camPos)
   let ro = camPos
-  let hit = ray rd ro
+  let hit = ray x y rd ro
   in hit
 
 let bounds lower upper x : f32 = if x < lower then lower else (if x > upper then upper else x)
