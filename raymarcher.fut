@@ -12,18 +12,21 @@ let vec (x, y, z) : vec3 = {x, y, z}
 let col (r, g, b) : col3 = {x=r, y=g, z=b}
 
 type material =
-  { colour: col3}
+  { colour: col3
+  , light: bool}
 
-let black = {colour=col(0.0, 0.0, 0.0)}
-let white = {colour=col(1.0, 1.0, 1.0)}
-let blue = {colour=col(0.2, 0.4, 0.95)}
-let red = {colour=col(1.0, 0.1, 0.15)}
+let diffuse colour = {colour, light=false}
+let light colour = {colour, light=true}
+let black = col(0.0, 0.0, 0.0)
+let white = col(1.0, 1.0, 1.0)
+let blue = col(0.2, 0.4, 0.95)
+let red = col(1.0, 0.1, 0.15)
 
 type hit = #no_hit | #hit {hitPos: vec3, mat: material}
 
 let scene : [](object, material) =
-  [(#plane, blue),
-   (#sphere {centre=vec(0, 1, 0), radius=1}, red)]
+  [(#plane, diffuse blue),
+   (#sphere {centre=vec(0, 1, 0), radius=1}, light red)]
 
 let getDist (p : vec3) (obj : object, mat : material) : (f32, material) =
   (match obj
@@ -37,7 +40,7 @@ let minMat ((x, xmat) : (f32, material)) ((y, ymat) :  (f32, material)) : (f32, 
   = if x < y then (x,xmat) else (y,ymat)
 
 let sceneDist (p : vec3) : (f32, material) =
-  reduce minMat (f32.highest, black) (map (getDist p) scene)
+  reduce minMat (f32.highest, diffuse black) (map (getDist p) scene)
 
 let fst (a, b) = a
 let snd (a, b) = b
@@ -53,24 +56,11 @@ let getNorm p : vec3 =
              ,d - fst(sceneDist(p vec3.- vec(0, 0, epsilon))))
   in vec3.normalise n
 
-let getLight p : f32 =
-  let lightPos = vec (-2, 3, -2)
-  let lightDir = vec3.normalise(lightPos vec3.- p)
-  let norm = getNorm p
-  in vec3.dot norm lightDir
-
-let getColour (hit : hit) : col3 =
-  match hit
-  case #no_hit -> col(0, 0, 1)
-  case #hit {hitPos, mat} ->
-    let c = getLight hitPos
-    in col(c, c, c) vec3.* mat.colour
-
 let march (rd : vec3) (ro : vec3) : hit =
   let steps = 0
   let dist : f32 = -1
   let d : f32 = 1
-  let mat = black
+  let mat = diffuse black
   let (_, _, d, ro, mat) : (i32, f32, f32, vec3, material) =
     loop (steps, dist, d, ro, mat) while (steps < maxSteps && (dist == -1 || d >= epsilon)) do
     let (d, mat) = sceneDist ro
@@ -84,14 +74,18 @@ let march (rd : vec3) (ro : vec3) : hit =
 let ray (rd : vec3) (ro : vec3) : col3 =
   let bounces = 0
   let colour = col(1.0, 1.0, 1.0)
-  let (bounces, colour, _, _) =
-    loop (bounces, colour, rd, ro) while (bounces < maxBounces) do
+  let break = false
+  let (bounces, colour, _, _, _) =
+    loop (bounces, colour, rd, ro, break) while (bounces < maxBounces && !break) do
          match march rd ro
-         case #no_hit -> (bounces+1, col(0, 0, 0), rd, ro)
+         case #no_hit -> (bounces+1, col(0, 0, 0), rd, ro, false)
          case #hit {hitPos, mat} ->
-      let hitNorm = getNorm(hitPos)
-      let reflected = hitNorm --TODO: reflect ray in normal
-      in (bounces+1, colour vec3.* mat.colour, reflected, hitPos vec3.+ (vec3.scale epsilon reflected))
+      if mat.light
+      then (bounces, colour vec3.* mat.colour, vec(0,0,0), vec(0,0,0), true)
+      else
+        let hitNorm = getNorm(hitPos)
+        let reflected = hitNorm --TODO: reflect ray in normal
+        in (bounces+1, colour vec3.* mat.colour, reflected, hitPos vec3.+ (vec3.scale epsilon reflected), false)
   let finalColour = if bounces != maxBounces then colour else col(0, 0, 0)
   in finalColour
 
