@@ -33,5 +33,8 @@ let camera : camera =
   #simple {camPos=vec(0, 3, -8)
           , lookAt=vec(0, 2, 0)}
 
+let globalLight (rd : vec3) =
+  vec(0,0,0)
+
 entry main : [height][width][3]u8 =
-  raymarcher {sdf=cornellBoxScene, camera}
+  raymarcher {sdf=cornellBoxScene, globalLight, camera}

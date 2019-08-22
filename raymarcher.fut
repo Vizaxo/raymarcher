@@ -80,14 +80,14 @@ let sampleHemisphere n x y ray bounce : vec3 =
   let v = sampleSphere x y ray bounce
   in normalTowards n v
 
-let ray sdf ray x y (rd : vec3) (ro : vec3) : col3 =
+let ray sdf globalLight ray x y (rd : vec3) (ro : vec3) : col3 =
   let bounces = 0
   let colour = col(1.0, 1.0, 1.0)
   let break = false
   let (bounces, colour, _, _, _) =
     loop (bounces, colour, rd, ro, break) while (bounces < maxBounces && !break) do
          match march sdf rd ro
-         case #no_hit -> (bounces, col(0,0,0), rd, ro, true)
+         case #no_hit -> (bounces, colour vec3.* globalLight rd, rd, ro, true)
          case #hit {hitPos, mat, insideObj} ->
       if mat.light
       then (bounces, colour vec3.* mat.colour, vec(0,0,0), vec(0,0,0), true)
@@ -115,33 +115,33 @@ let ray sdf ray x y (rd : vec3) (ro : vec3) : col3 =
             hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
   in if bounces != maxBounces then colour else col(0,0,0)
 
-let jitterRay sdf i x y rd ro =
+let jitterRay sdf globalLight i x y rd ro =
   let u1 = rand x y i 0 2
   let u2 = rand x y i 0 3
   --TODO: jitter position, not direction
   let rd = vec3.normalise <| rd vec3.+ vec(u1 / f32.i32 width, u2 / f32.i32 height, 0)
-  in ray sdf i x y rd ro
+  in ray sdf globalLight i x y rd ro
 
-let pixel sdf x y rd ro : col3 =
+let pixel sdf globalLight x y rd ro : col3 =
   let mr = f32.i32 maxRays
-  in reduce (vec3.+) (col(0,0,0)) (map (\i -> jitterRay sdf i x y rd ro) (iota maxRays)) vec3./ col(mr,mr,mr)
+  in reduce (vec3.+) (col(0,0,0)) (map (\i -> jitterRay sdf globalLight i x y rd ro) (iota maxRays)) vec3./ col(mr,mr,mr)
 
 let gammaCorrect c =
   vec3.map (f32.** 0.45) c
 
-let marcher sdf camPos lookAt (x: f32) (y:f32) : col3 =
+let marcher sdf globalLight camPos lookAt (x: f32) (y:f32) : col3 =
   let filmCentre = camPos vec3.+ vec3.normalise(lookAt vec3.- camPos)
   let fov = 1
   let aspectRatio = f32.i32 width / f32.i32 height
   let filmPos = filmCentre vec3.+ vec(x*fov*aspectRatio, y*fov, 0)
   let rd = vec3.normalise(filmPos vec3.- camPos)
   let ro = camPos
-  in gammaCorrect <| pixel sdf x y rd ro
+  in gammaCorrect <| pixel sdf globalLight x y rd ro
 
-let shader {sdf, camera} (y: f32) (x: f32) : col3 =
+let shader {sdf, globalLight, camera} (y: f32) (x: f32) : col3 =
   match (camera : camera)
   case #simple {camPos, lookAt} ->
-    marcher sdf camPos lookAt x y
+    marcher sdf globalLight camPos lookAt x y
 
 let packCol ({x=r, y=g, z=b} : col3) : [3]u8 = map (u8.f32 <-< clamp 0 255 <-< (* 255)) [r, g, b]
 
