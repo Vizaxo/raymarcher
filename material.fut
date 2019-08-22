@@ -8,10 +8,12 @@ type material =
 
 let diffuse colour : material
   = {colour, light=false, reflectivity=0.2, transparent=#nothing}
+let specular colour : material
+  = {colour, light=false, reflectivity=1.0, transparent=#nothing}
 let light colour : material
   = {colour, light=true, reflectivity=0.2, transparent=#nothing}
 let mirror colour : material
-  = {colour, light=false, reflectivity=0.95, transparent=#nothing}
+  = {colour, light=false, reflectivity=1.0, transparent=#nothing}
 let glass : material
   = {colour=col(1.0, 1.0, 1.0), light=false, reflectivity=1.0
      , transparent=#just 2}
@@ -19,5 +21,3 @@ let black = col(0.0, 0.0, 0.0)
 let white = col(0.5, 0.5, 0.5)
 let blue = col(0.05, 0.05, 0.3)
 let red = col(1.0, 0.1, 0.1)
-let skyColour = col(0.1, 0.1, 0.5)
-let sunColour = col(5, 5, 4)

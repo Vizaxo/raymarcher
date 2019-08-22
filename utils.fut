@@ -33,3 +33,7 @@ let f32rand (f : f32) =
   in f32.from_bits h - 1.0
 
 let clamp lower upper x : f32 = if x < lower then lower else (if x > upper then upper else x)
+
+let fmod (x : f32) (y : f32) : f32 =
+  let res = x / y
+  in (res - f32.floor res) * y

@@ -2,14 +2,14 @@ import "utils"
 import "material"
 import "scene"
 
-let slow : bool = false
-let height : i32 = if slow then 400 else 100
-let width : i32 = if slow then 600 else 100
+let slow : bool = true
+let height : i32 = if slow then 400 else 200
+let width : i32 = if slow then 600 else 200
 
 let maxSteps : i32 = if slow then 100 else 50
-let maxBounces : i32 = if slow then 50 else 20
+let maxBounces : i32 = if slow then 200 else 50
 let maxRays : i32 = if slow then 4000 else 500
-let epsilon : f32 = 0.001
+let epsilon : f32 = 0.01
 
 type hit = #no_hit | #hit {hitPos: vec3, mat: material, insideObj: bool}
 
