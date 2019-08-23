@@ -8,5 +8,5 @@ This project is developed with [Liveshader](https://github.com/Vizaxo/liveshader
 
 ## Sceenshots
 
-![](screenshots/cornell-box-1.png)
+![](screenshots/cornell-mirror-box.png)
 ![](screenshots/cornell-box-2.png)

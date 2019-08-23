@@ -6,9 +6,9 @@ let slow : bool = false
 let height : i32 = if slow then 400 else 300
 let width : i32 = if slow then 600 else 300
 
-let maxSteps : i32 = if slow then 100 else 50
-let maxBounces : i32 = if slow then 20 else 10
-let maxRays : i32 = if slow then 2000 else 2000
+let maxSteps : i32 = if slow then 200 else 100
+let maxBounces : i32 = if slow then 50 else 20
+let maxRays : i32 = if slow then 10000 else 2000
 let epsilon : f32 = 0.01
 
 type hit = #no_hit | #hit {hitPos: vec3, mat: material, insideObj: bool}
