@@ -2,13 +2,13 @@ import "utils"
 import "material"
 import "scene"
 
-let slow : bool = true
-let height : i32 = if slow then 400 else 200
-let width : i32 = if slow then 600 else 200
+let slow : bool = false
+let height : i32 = if slow then 400 else 300
+let width : i32 = if slow then 600 else 300
 
 let maxSteps : i32 = if slow then 100 else 50
-let maxBounces : i32 = if slow then 200 else 50
-let maxRays : i32 = if slow then 4000 else 500
+let maxBounces : i32 = if slow then 20 else 10
+let maxRays : i32 = if slow then 2000 else 2000
 let epsilon : f32 = 0.01
 
 type hit = #no_hit | #hit {hitPos: vec3, mat: material, insideObj: bool}
@@ -111,7 +111,8 @@ let ray sdf globalLight ray x y (rd : vec3) (ro : vec3) : col3 =
                then perfectReflect
                else trace (snell rd hitNorm n1 n2)
         let newRay = vec3.normalise newRay
-        in (bounces+1, colour vec3.* mat.colour, newRay,
+        let cosineTerm = f32.abs (vec3.dot newRay hitNorm)
+        in (bounces+1, vec3.scale cosineTerm (colour vec3.* mat.colour), newRay,
             hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
   in if bounces != maxBounces then colour else col(0,0,0)
 
