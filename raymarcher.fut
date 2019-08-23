@@ -76,9 +76,37 @@ let normalTowards n rd =
   then vinvert rd
   else rd
 
-let sampleHemisphere n x y ray bounce : vec3 =
+let sampleUniformHemisphere n x y ray bounce : vec3 =
   let v = sampleSphere x y ray bounce
   in normalTowards n v
+
+type mat33 = {a: vec3, b: vec3, c: vec3}
+
+let mulMat33 (m : mat33) (v : vec3) : vec3 =
+  vec( v.x * m.a.x + v.y * m.b.x + v.z * m.c.x
+     , v.x * m.a.y + v.y * m.b.y + v.z * m.c.y
+     , v.x * m.a.z + v.y * m.b.z + v.z * m.c.z)
+
+let transposeM33 (m : mat33) : mat33 =
+  { a = vec(m.a.x, m.b.x, m.c.x)
+  , b = vec(m.a.y, m.b.y, m.c.y)
+  , c = vec(m.a.z, m.b.z, m.c.z)}
+
+let sampleCosineHemisphere n x y ray bounce : vec3 =
+  let u1 = rand x y ray bounce 0
+  let u2 = rand x y ray bounce 10
+  let r = f32.sqrt u1
+  let theta = tau * u2
+  let tangent' = vec3.cross n (vec(0,1,0))
+  let tangent =
+    if vec3.quadrance tangent' <= 0.001
+    then vec(1,0,0)
+    else vec3.normalise tangent'
+  let bitangent = vec3.cross tangent n
+  let tangentToWorld = {a = tangent, b = bitangent, c = n} --TODO: transpose?
+  let vTangentSpace
+    = vec(r * f32.cos theta, r * f32.sin theta, f32.sqrt(1 - u1))
+  in mulMat33 tangentToWorld vTangentSpace
 
 let ray sdf globalLight ray x y (rd : vec3) (ro : vec3) : col3 =
   let bounces = 0
@@ -94,7 +122,7 @@ let ray sdf globalLight ray x y (rd : vec3) (ro : vec3) : col3 =
       else
         let hitNorm = getNorm sdf hitPos
         let perfectReflect = reflect rd hitNorm
-        let scattered = sampleHemisphere hitNorm x y ray bounces
+        let scattered = sampleCosineHemisphere hitNorm x y ray bounces
         let reflected = lerp scattered perfectReflect (mat.reflectivity)
         let newRay =
           match mat.transparent
@@ -111,8 +139,7 @@ let ray sdf globalLight ray x y (rd : vec3) (ro : vec3) : col3 =
                then perfectReflect
                else trace (snell rd hitNorm n1 n2)
         let newRay = vec3.normalise newRay
-        let cosineTerm = f32.abs (vec3.dot newRay hitNorm)
-        in (bounces+1, vec3.scale cosineTerm (colour vec3.* mat.colour), newRay,
+        in (bounces+1, colour vec3.* mat.colour, newRay,
             hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
   in if bounces != maxBounces then colour else col(0,0,0)
 
