@@ -17,6 +17,9 @@ let mirror colour : material
 let glass : material
   = {colour=col(1.0, 1.0, 1.0), light=false, reflectivity=1.0
      , transparent=#just 1.5}
+let transparent colour (ri : f32) : material
+  = {colour, light=false, reflectivity=1.0
+     , transparent=#just ri}
 let black = col(0.0, 0.0, 0.0)
 let white = col(0.5, 0.5, 0.5)
 let blue = col(0.05, 0.05, 0.3)

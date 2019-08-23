@@ -9,4 +9,5 @@ This project is developed with [Liveshader](https://github.com/Vizaxo/liveshader
 ## Sceenshots
 
 ![](screenshots/cornell-mirror-box.png)
+![](screenshots/infinite-spheres.png)
 ![](screenshots/cornell-box-2.png)
