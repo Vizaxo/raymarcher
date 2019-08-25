@@ -45,14 +45,17 @@ let vinvert v : vec3 =
   vec3.map (* (-1)) v
 
 -- Snell's law for calculating the angle of refraction
-let snell rd surfaceNorm n1 n2 : vec3 =
+let snell rd surfaceNorm n1 n2 : maybe vec3 =
   let normal = if vec3.dot rd surfaceNorm <= 0
                then surfaceNorm
                else vinvert surfaceNorm
   let r = n1 / n2
   let rootTerm = 1 - (r*r) * vec3.quadrance (vec3.cross normal rd)
-  in (vec3.scale r (vec3.cross normal (vec3.cross (vinvert normal) rd)))
-     vec3.- (vec3.scale (f32.sqrt rootTerm) normal)
+  in if rootTerm < 0
+     then #nothing
+     else #just
+          ((vec3.scale r (vec3.cross normal (vec3.cross (vinvert normal) rd)))
+           vec3.- (vec3.scale (f32.sqrt rootTerm) normal))
 
 -- Schlick's approximation of the Fresnel factor for calulating the
 -- contribution ratio of reflected to refracted light
@@ -121,23 +124,26 @@ let ray sdf globalLight ray x y (rd : vec3) (ro : vec3) : col3 =
       then (bounces, colour vec3.* mat.colour, vec(0,0,0), vec(0,0,0), true)
       else
         let hitNorm = getNorm sdf hitPos
+        let hitNorm = if insideObj then vinvert hitNorm else hitNorm
         let perfectReflect = reflect rd hitNorm
-        let scattered = sampleCosineHemisphere hitNorm x y ray bounces
+        let scattered = sampleCosineHemisphere hitNorm x y rayNum bounces
         let reflected = lerp scattered perfectReflect (mat.reflectivity)
         let newRay =
           match mat.transparent
           case #nothing ->
             reflected
           case #just ri ->
-            let costheta = vec3.dot (normalTowards hitNorm rd) rd
-            let costheta = if insideObj then costheta else -costheta
+            let costheta = -(vec3.dot hitNorm rd)
             let n1 = if insideObj then ri else 1
             let n2 = if insideObj then 1 else ri
-            let pReflection = schlick n1 n2 costheta
-            let u1 = rand x y ray bounces 5
-            in if pReflection > u1
-               then perfectReflect
-               else trace (snell rd hitNorm n1 n2)
+            let u1 = rand x y rayNum bounces 5
+            in match snell rd hitNorm n1 n2
+               case #nothing -> perfectReflect
+               case #just refract ->
+                 let pReflection = schlick n1 n2 costheta
+                 in if pReflection > u1
+                    then perfectReflect
+                    else refract
         let newRay = vec3.normalise newRay
         in (bounces+1, colour vec3.* mat.colour, newRay,
             hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
