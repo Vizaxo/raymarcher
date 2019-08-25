@@ -106,7 +106,7 @@ let sampleCosineHemisphere n x y ray bounce : vec3 =
     then vec(1,0,0)
     else vec3.normalise tangent'
   let bitangent = vec3.cross tangent n
-  let tangentToWorld = {a = tangent, b = bitangent, c = n} --TODO: transpose?
+  let tangentToWorld = {a = tangent, b = bitangent, c = n}
   let vTangentSpace
     = vec(r * f32.cos theta, r * f32.sin theta, f32.sqrt(1 - u1))
   in mulMat33 tangentToWorld vTangentSpace
