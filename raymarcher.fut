@@ -176,5 +176,18 @@ let packCol ({x=r, y=g, z=b} : col3) : [3]u8 = map (u8.f32 <-< clamp 0 255 <-< (
 let canvas scene (y: i32) (x: i32) : [3]u8 =
   packCol <| (shader scene (-((f32.i32 y) / (f32.i32 height) - 0.5)) ((f32.i32 x) / (f32.i32 width) - 0.5))
 
+let debug = false
+let debugX : i32 = 50
+let debugY : i32 = 152
+
+let raymarcherDebug scene : [height][width][3]u8 =
+  map (\y -> (map (\x -> if x == debugX && y == debugY
+                         then canvas scene y x
+                         else [0,255,0])
+                  (iota width)))
+      (iota height)
+
 let raymarcher scene : [height][width][3]u8 =
-  map (\x -> (map (canvas scene x) (iota width))) (iota height)
+  if debug
+  then raymarcherDebug scene
+  else map (\y -> (map (canvas scene y) (iota width))) (iota height)
