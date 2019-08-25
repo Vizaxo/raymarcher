@@ -22,6 +22,9 @@ let getNorm sdf p : vec3 =
                       ,fst(sdf(p vec3.- vec(0, 0, epsilon))))
   in vec3.normalise n
 
+type wavelength = #red | #green | #blue
+type ray = {rd: vec3, ro: vec3, wavelength: wavelength}
+
 let march sdf (rd : vec3) (ro : vec3) : hit =
   let steps = 0
   let dist : f32 = -1
@@ -111,10 +114,18 @@ let sampleCosineHemisphere n x y ray bounce : vec3 =
     = vec(r * f32.cos theta, r * f32.sin theta, f32.sqrt(1 - u1))
   in mulMat33 tangentToWorld vTangentSpace
 
-let ray sdf globalLight ray x y (rd : vec3) (ro : vec3) : col3 =
+let getRi (wavelength: wavelength) (ri : refractiveIndex) : f32 =
+  match wavelength
+  case #red -> ri.riRed
+  case #green -> ri.riGreen
+  case #blue -> ri.riBlue
+
+let castRay sdf globalLight rayNum x y (ray : ray) : col3 =
   let bounces = 0
   let colour = col(1.0, 1.0, 1.0)
   let break = false
+  let rd = ray.rd
+  let ro = ray.ro
   let (bounces, colour, _, _, _) =
     loop (bounces, colour, rd, ro, break) while (bounces < maxBounces && !break) do
          match march sdf rd ro
@@ -133,6 +144,7 @@ let ray sdf globalLight ray x y (rd : vec3) (ro : vec3) : col3 =
           case #nothing ->
             reflected
           case #just ri ->
+            let ri = getRi ray.wavelength ri
             let costheta = -(vec3.dot hitNorm rd)
             let n1 = if insideObj then ri else 1
             let n2 = if insideObj then 1 else ri
@@ -149,16 +161,32 @@ let ray sdf globalLight ray x y (rd : vec3) (ro : vec3) : col3 =
             hitPos vec3.+ (vec3.scale (10*epsilon) newRay), false)
   in if bounces != maxBounces then colour else col(0,0,0)
 
+let getWavelengthColour (wavelength : wavelength) : col3 =
+  match wavelength
+  case #red -> col(1.0, 0.0, 0.0)
+  case #green -> col(0.0, 1.0, 0.0)
+  case #blue -> col(0.0, 0.0, 1.0)
+
 let jitterRay sdf globalLight i x y rd ro =
   let u1 = rand x y i 0 2
   let u2 = rand x y i 0 3
+  let u3 = rand x y i 0 11 * 3
+  let wavelength = if u3 <= 1
+                   then #red
+                   else if u3 <= 2
+                   then #green
+                   else #blue
   --TODO: jitter position, not direction
   let rd = vec3.normalise <| rd vec3.+ vec(u1 / f32.i32 width, u2 / f32.i32 height, 0)
-  in ray sdf globalLight i x y rd ro
+  let wavelengthColour = getWavelengthColour wavelength
+  in wavelengthColour vec3.* castRay sdf globalLight i x y {rd, ro, wavelength}
 
 let pixel sdf globalLight x y rd ro : col3 =
   let mr = f32.i32 maxRays
-  in reduce (vec3.+) (col(0,0,0)) (map (\i -> jitterRay sdf globalLight i x y rd ro) (iota maxRays)) vec3./ col(mr,mr,mr)
+  in reduce (vec3.+) (col(0,0,0))
+            (map (\i -> jitterRay sdf globalLight i x y rd ro)
+                 (iota maxRays))
+            vec3./ col(mr,mr,mr)
 
 let gammaCorrect c =
   vec3.map (f32.** 0.45) c

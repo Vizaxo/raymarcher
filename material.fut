@@ -1,10 +1,12 @@
 import "utils"
 
+type refractiveIndex = {riRed: f32, riGreen: f32, riBlue: f32}
+
 type material =
   { colour: col3
   , reflectivity: f32
   , light: bool
-  , transparent: maybe f32}
+  , transparent: maybe refractiveIndex}
 
 let diffuse colour : material
   = {colour, light=false, reflectivity=0.0, transparent=#nothing}
@@ -16,8 +18,8 @@ let mirror colour : material
   = {colour, light=false, reflectivity=1.0, transparent=#nothing}
 let glass : material
   = {colour=col(1.0, 1.0, 1.0), light=false, reflectivity=1.0
-     , transparent=#just 1.5}
-let transparent colour (ri : f32) : material
+     , transparent=#just {riRed=1.40, riGreen=1.50, riBlue=1.60}}
+let transparent colour (ri : refractiveIndex) : material
   = {colour, light=false, reflectivity=1.0
      , transparent=#just ri}
 let black = col(0.0, 0.0, 0.0)
